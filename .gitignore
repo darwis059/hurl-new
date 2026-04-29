@@ -1,0 +1,16 @@
+*.swp
+*.swo
+*.pyc
+*.profraw
+.mypy_cache/
+
+target/
+.idea/
+.venv/
+build/
+node_modules/
+**/npm/bin/
+
+# LLM assisted tools
+.claude/
+.copilot/

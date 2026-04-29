@@ -1,0 +1,6 @@
+name: negotiate
+long: negotiate
+help: Tell Hurl to use Negotiate (SPNEGO) authentication
+help_heading: HTTP options
+---
+Tell Hurl to use Negotiate (SPNEGO) authentication.

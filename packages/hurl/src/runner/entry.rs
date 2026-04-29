@@ -1,0 +1,425 @@
+/*
+ * Hurl (https://hurl.dev)
+ * Copyright (C) 2026 Orange
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+use hurl_core::ast::{
+    Assert, Capture, Entry, FilterValue, PredicateFuncValue, Response, SourceInfo,
+};
+use hurl_core::types::Index;
+
+use crate::http;
+use crate::http::{ClientOptions, CurlCmd};
+use crate::util::logger::{Logger, Verbosity};
+use crate::util::term::WriteMode;
+
+use super::cache::BodyCache;
+use super::error::{RunnerError, RunnerErrorKind};
+use super::request;
+use super::response;
+use super::result::{AssertResult, CaptureResult, EntryResult};
+use super::runner_options::RunnerOptions;
+use super::variable::VariableSet;
+
+/// Runs an `entry` with `http_client` and returns one [`EntryResult`].
+///
+/// The `calls` field of the [`EntryResult`] contains a list of HTTP requests and responses that have
+/// been executed. If `http_client` has been configured to follow redirection, the `calls` list contains
+/// every step of the redirection for the first to the last.
+/// `variables` are used to render values at runtime, and can be updated by captures.
+pub fn run(
+    entry: &Entry,
+    entry_index: Index,
+    http_client: &mut http::Client,
+    variables: &mut VariableSet,
+    runner_options: &RunnerOptions,
+    logger: &mut Logger,
+) -> EntryResult {
+    let compressed = runner_options.compressed;
+    let source_info = entry.source_info();
+    let context_dir = &runner_options.context_dir;
+
+    // We don't allow creating secrets if the logger is immediate and verbose because, in this case,
+    // network logs have already been written and may have leaked secrets before captures evaluation.
+    // Note: in `--test` mode, the logger is buffered so there is no restriction on logger level.
+    if let Some(response_spec) = &entry.response {
+        let immediate_logs =
+            matches!(logger.stderr.mode(), WriteMode::Immediate) && logger.verbosity.is_some();
+        if immediate_logs {
+            let redacted = response_spec.captures().iter().find(|c| c.redacted);
+            if let Some(redacted) = redacted {
+                let source_info = redacted.name.source_info;
+                let error =
+                    RunnerError::new(source_info, RunnerErrorKind::PossibleLoggedSecret, false);
+                return EntryResult {
+                    entry_index,
+                    source_info,
+                    errors: vec![error],
+                    compressed,
+                    ..Default::default()
+                };
+            }
+        }
+    }
+
+    // Evaluates our source requests given our set of variables
+    let http_request = match request::eval_request(&entry.request, variables, context_dir) {
+        Ok(r) => r,
+        Err(error) => {
+            return EntryResult {
+                entry_index,
+                source_info,
+                errors: vec![error],
+                compressed,
+                ..Default::default()
+            };
+        }
+    };
+
+    let client_options = ClientOptions::from(runner_options, logger.verbosity);
+
+    // Experimental features with cookie storage
+    if let Some(s) = request::get_cmd_cookie_storage_set(&entry.request) {
+        if let Ok(cookie) = http::Cookie::from_netscape(&s) {
+            http_client.add_cookie(&cookie, logger);
+        } else {
+            logger.warning(&format!("Cookie string can not be parsed: '{s}'"));
+        }
+    }
+    if request::get_cmd_cookie_storage_clear(&entry.request) {
+        http_client.clear_cookie_storage(logger);
+    }
+
+    let curl_cmd = http_client.curl_command_line(
+        &http_request,
+        context_dir,
+        runner_options.output.as_ref(),
+        &client_options,
+        logger,
+    );
+
+    log_request(http_client, &curl_cmd, &http_request, logger);
+
+    // Run the HTTP requests (optionally follow redirection)
+    let calls = match http_client.execute_with_redirect(&http_request, &client_options, logger) {
+        Ok(calls) => calls,
+        Err(http_error) => {
+            let start = entry.request.url.source_info.start;
+            let end = entry.request.url.source_info.end;
+            let error_source_info = SourceInfo::new(start, end);
+            let error =
+                RunnerError::new(error_source_info, RunnerErrorKind::Http(http_error), false);
+            return EntryResult {
+                entry_index,
+                source_info,
+                errors: vec![error],
+                compressed,
+                curl_cmd,
+                ..Default::default()
+            };
+        }
+    };
+
+    // Now, we can compute capture and asserts on the last HTTP request/response chains.
+    let responses = calls.iter().map(|c| &c.response).collect::<Vec<_>>();
+    let http_response = responses.last().unwrap();
+
+    // `transfer_duration` represent the network time of calls, not including assert processing.
+    let transfer_duration = calls.iter().map(|call| call.timings.total).sum();
+
+    // We proceed asserts and captures in this order:
+    // 1. first, check implicit assert on status and version. If KO, test is failed
+    // 2. then, we compute captures, we might need them in asserts
+    // 3. finally, run the remaining asserts
+    let mut cache = BodyCache::new();
+    let mut asserts = vec![];
+
+    if !runner_options.no_assert
+        && let Some(response_spec) = &entry.response
+    {
+        let mut status_asserts =
+            response::eval_version_status_asserts(response_spec, http_response);
+        let errors = asserts_to_errors(&status_asserts);
+        asserts.append(&mut status_asserts);
+        if !errors.is_empty() {
+            logger.debug("");
+            return EntryResult {
+                entry_index,
+                source_info,
+                calls,
+                captures: vec![],
+                asserts,
+                errors,
+                transfer_duration,
+                compressed,
+                curl_cmd,
+            };
+        }
+    };
+
+    let captures = match &entry.response {
+        None => vec![],
+        Some(response_spec) => {
+            match response::eval_captures(response_spec, &responses, &mut cache, variables) {
+                Ok(captures) => captures,
+                Err(e) => {
+                    return EntryResult {
+                        entry_index,
+                        source_info,
+                        calls,
+                        captures: vec![],
+                        asserts,
+                        errors: vec![e],
+                        transfer_duration,
+                        compressed,
+                        curl_cmd,
+                    };
+                }
+            }
+        }
+    };
+
+    // After captures evaluation, we update the logger with secrets from the variable set. The variable
+    // set can have been updated with new secrets to redact.
+    logger.set_secrets(variables.secrets());
+
+    log_captures(&captures, logger);
+    logger.debug("");
+
+    // Compute asserts
+    if !runner_options.no_assert
+        && let Some(response_spec) = &entry.response
+    {
+        warn_deprecated(response_spec, logger);
+        let mut other_asserts = response::eval_asserts(
+            response_spec,
+            variables,
+            &responses,
+            &mut cache,
+            context_dir,
+        );
+        asserts.append(&mut other_asserts);
+    };
+
+    let errors = asserts_to_errors(&asserts);
+
+    EntryResult {
+        entry_index,
+        source_info,
+        calls,
+        captures,
+        asserts,
+        errors,
+        transfer_duration,
+        compressed,
+        curl_cmd,
+    }
+}
+
+/// Converts a list of [`AssertResult`] to a list of [`RunnerError`].
+fn asserts_to_errors(asserts: &[AssertResult]) -> Vec<RunnerError> {
+    asserts
+        .iter()
+        .filter_map(|assert| assert.to_runner_error())
+        .map(
+            |RunnerError {
+                 source_info,
+                 kind: inner,
+                 ..
+             }| RunnerError::new(source_info, inner, true),
+        )
+        .collect()
+}
+
+impl ClientOptions {
+    fn from(runner_options: &RunnerOptions, verbosity: Option<Verbosity>) -> Self {
+        ClientOptions {
+            allow_reuse: runner_options.allow_reuse,
+            aws_sigv4: runner_options.aws_sigv4.clone(),
+            cacert_file: runner_options.cacert_file.clone(),
+            client_cert_file: runner_options.client_cert_file.clone(),
+            client_key_file: runner_options.client_key_file.clone(),
+            compressed: runner_options.compressed,
+            connect_timeout: runner_options.connect_timeout,
+            connects_to: runner_options.connects_to.clone(),
+            cookie_input_file: runner_options.cookie_input_file.clone(),
+            digest: runner_options.digest,
+            follow_location: runner_options.follow_location,
+            headers: runner_options.headers.clone(),
+            http_version: runner_options.http_version,
+            ip_resolve: runner_options.ip_resolve,
+            max_filesize: runner_options.max_filesize,
+            max_recv_speed: runner_options.max_recv_speed,
+            max_redirect: runner_options.max_redirect,
+            max_send_speed: runner_options.max_send_speed,
+            negotiate: runner_options.negotiate,
+            netrc: runner_options.netrc,
+            netrc_file: runner_options.netrc_file.clone(),
+            netrc_optional: runner_options.netrc_optional,
+            ntlm: runner_options.ntlm,
+            path_as_is: runner_options.path_as_is,
+            pinned_pub_key: runner_options.pinned_pub_key.clone(),
+            proxy: runner_options.proxy.clone(),
+            no_proxy: runner_options.no_proxy.clone(),
+            insecure: runner_options.insecure,
+            resolves: runner_options.resolves.clone(),
+            ssl_no_revoke: runner_options.ssl_no_revoke,
+            timeout: runner_options.timeout,
+            unix_socket: runner_options.unix_socket.clone(),
+            use_cookie_store: runner_options.use_cookie_store,
+            user: runner_options.user.clone(),
+            user_agent: runner_options.user_agent.clone(),
+            verbosity: verbosity.map(|v| match v {
+                Verbosity::LowVerbose => http::Verbosity::LowVerbose,
+                Verbosity::Verbose => http::Verbosity::Verbose,
+                Verbosity::VeryVerbose => http::Verbosity::VeryVerbose,
+            }),
+        }
+    }
+}
+
+/// Logs this HTTP `request`.
+fn log_request(
+    http_client: &mut http::Client,
+    curl_cmd: &CurlCmd,
+    request: &http::RequestSpec,
+    logger: &mut Logger,
+) {
+    let cookie_store = http_client.cookie_store(logger);
+
+    logger.debug("");
+    logger.debug_important("Cookie store:");
+    for cookie in cookie_store.cookies() {
+        logger.debug(&cookie.to_string());
+    }
+
+    logger.debug("");
+    logger.debug_important("Request:");
+    logger.debug(&format!("{} {}", request.method, request.url.raw()));
+    for header in &request.headers {
+        logger.debug(&header.to_string());
+    }
+    if !request.querystring.is_empty() {
+        logger.debug("[Query]");
+        for param in &request.querystring {
+            logger.debug(&param.to_string());
+        }
+    }
+    if !request.form.is_empty() {
+        logger.debug("[Form]");
+        for param in &request.form {
+            logger.debug(&param.to_string());
+        }
+    }
+    if !request.multipart.is_empty() {
+        logger.debug("[Multipart]");
+        for param in &request.multipart {
+            logger.debug(&param.to_string());
+        }
+    }
+    if !request.cookies.is_empty() {
+        logger.debug("[Cookies]");
+        for cookie in &request.cookies {
+            logger.debug(&cookie.to_string());
+        }
+    }
+    logger.debug("");
+    logger.debug("Request can be run with the following curl command:");
+    logger.debug(&curl_cmd.to_string());
+    logger.debug("");
+}
+
+/// Logs the `captures` from the entry HTTP response.
+fn log_captures(captures: &[CaptureResult], logger: &mut Logger) {
+    if captures.is_empty() {
+        return;
+    }
+    logger.debug_important("Captures:");
+    for c in captures.iter() {
+        logger.capture(&c.name, &c.value);
+    }
+}
+
+/// Warns some deprecation on this `response`.
+fn warn_deprecated(response_spec: &Response, logger: &mut Logger) {
+    if response_spec.asserts().iter().any(|a| {
+        matches!(
+            &a.predicate.predicate_func.value,
+            PredicateFuncValue::Include { .. }
+        )
+    }) {
+        logger.warning("<includes> predicate is now deprecated in favor of <contains> predicate");
+    }
+    if response_spec
+        .captures()
+        .iter()
+        .any(captures_has_format_filter)
+    {
+        logger.warning(
+            "<format> filter in captures is now deprecated in favor of <dateFormat> filter",
+        );
+    }
+    if response_spec
+        .captures()
+        .iter()
+        .any(captures_has_decode_filter)
+    {
+        logger.warning(
+            "<decode> filter in captures is now deprecated in favor of <charsetDecode> filter",
+        );
+    }
+    if response_spec
+        .asserts()
+        .iter()
+        .any(asserts_has_format_filter)
+    {
+        logger.warning(
+            "<format> filter in asserts is now deprecated in favor of <dateFormat> filter",
+        );
+    }
+    if response_spec
+        .asserts()
+        .iter()
+        .any(asserts_has_decode_filter)
+    {
+        logger.warning(
+            "<decode> filter in asserts is now deprecated in favor of <charsetDecode> filter",
+        );
+    }
+}
+
+fn asserts_has_format_filter(a: &Assert) -> bool {
+    a.filters
+        .iter()
+        .any(|(_, f)| matches!(f.value, FilterValue::Format { .. }))
+}
+
+fn captures_has_format_filter(a: &Capture) -> bool {
+    a.filters
+        .iter()
+        .any(|(_, f)| matches!(f.value, FilterValue::Format { .. }))
+}
+
+fn asserts_has_decode_filter(a: &Assert) -> bool {
+    a.filters
+        .iter()
+        .any(|(_, f)| matches!(f.value, FilterValue::Decode { .. }))
+}
+
+fn captures_has_decode_filter(a: &Capture) -> bool {
+    a.filters
+        .iter()
+        .any(|(_, f)| matches!(f.value, FilterValue::Decode { .. }))
+}

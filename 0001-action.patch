@@ -1,0 +1,195 @@
+From b342f912b24063c2a73180f1534e9430c57f4bda Mon Sep 17 00:00:00 2001
+From: Darwis <darwis.e03@gmail.com>
+Date: Wed, 29 Apr 2026 21:17:25 +0800
+Subject: [PATCH] action
+
+---
+ .github/workflows/auto-close-inactive-pr.yml |  4 +-
+ .github/workflows/build-win.yml              | 55 ++++++++++++++++++++
+ .github/workflows/check.yml                  | 16 +++---
+ .github/workflows/coverage.yml               |  6 +--
+ .github/workflows/package.yml                |  2 +-
+ .github/workflows/test.yml                   | 16 +++---
+ .github/workflows/update-actions.yml         |  4 +-
+ 7 files changed, 79 insertions(+), 24 deletions(-)
+ create mode 100644 .github/workflows/build-win.yml
+
+diff --git a/.github/workflows/auto-close-inactive-pr.yml b/.github/workflows/auto-close-inactive-pr.yml
+index 20ca0aa199..f70a58c9d0 100644
+--- a/.github/workflows/auto-close-inactive-pr.yml
++++ b/.github/workflows/auto-close-inactive-pr.yml
+@@ -1,8 +1,8 @@
+ name: auto-close-inactive-pr
+ 
+ on:
+-  schedule:
+-    - cron: "0 3 * * *"
++  # schedule:
++  #   - cron: "0 3 * * *"
+   workflow_dispatch:
+ 
+ permissions: {}
+diff --git a/.github/workflows/build-win.yml b/.github/workflows/build-win.yml
+new file mode 100644
+index 0000000000..72fc417d16
+--- /dev/null
++++ b/.github/workflows/build-win.yml
+@@ -0,0 +1,55 @@
++name: package-drw
++
++on:
++  workflow_dispatch:
++
++permissions: {}
++
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref_name }}
++  cancel-in-progress: true
++
++env:
++  CARGO_TERM_COLOR: always
++
++jobs:
++  package-windows-x64:
++    runs-on: windows-latest
++    steps:
++    - name: Set git to use LF
++      run: |
++        git config --global core.autocrlf false
++        git config --global core.eol lf
++    - name: Checkout repository
++      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
++      with:
++        persist-credentials: false
++        ref: ${{ inputs.branch }}
++    - name: Install Rust
++      run: |
++        .\bin\install_rust.ps1
++    - name: Manage vcpkg cache
++      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae #v5.0.5
++      with:
++        path: C:\vcpkg
++        key: ${{ runner.os }}-release-windows-x64
++    - name: Install prerequisites
++      run: .\bin\install_prerequisites_windows.ps1
++    - name: Install Python 3.11
++      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 #v6.2.0
++      with:
++        python-version: '3.11'
++    - name: Environment
++      run: |
++        .\bin\activate_python3_venv.ps1
++        .\bin\environment.ps1
++    - name: Build
++      run: .\bin\release\release.ps1
++    - name: Create windows64 Zip package
++      run: .\bin\release\create_windows64_zip_package.ps1
++    - name: Archive production artifacts
++      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
++      with:
++        name: release-windows-x64-artifacts
++        path: |
++          .\target\win-package\hurl-*.zip
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index 3718fb8ee2..be0cfa023d 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -1,14 +1,14 @@
+ name: check
+ on:
+-  pull_request:
++  # pull_request:
+   workflow_dispatch:
+-  workflow_call:
+-    inputs:
+-      branch:
+-        description: "ref branch for this workflow"
+-        default: "master"
+-        required: true
+-        type: string
++  # workflow_call:
++  #   inputs:
++  #     branch:
++  #       description: "ref branch for this workflow"
++  #       default: "master"
++  #       required: true
++  #       type: string
+ 
+ permissions: {}
+ 
+diff --git a/.github/workflows/coverage.yml b/.github/workflows/coverage.yml
+index 163795e4f4..afa404d460 100644
+--- a/.github/workflows/coverage.yml
++++ b/.github/workflows/coverage.yml
+@@ -1,9 +1,9 @@
+ name: coverage
+ 
+ on:
+-  push:
+-    branches:
+-      - master
++  # push:
++  #   branches:
++  #     - master
+   workflow_dispatch:
+ 
+ permissions: {}
+diff --git a/.github/workflows/package.yml b/.github/workflows/package.yml
+index 071055e422..5873a32a88 100644
+--- a/.github/workflows/package.yml
++++ b/.github/workflows/package.yml
+@@ -1,7 +1,7 @@
+ name: package
+ 
+ on:
+-  pull_request:
++  # pull_request:
+   workflow_dispatch:
+   workflow_call:
+     inputs:
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index 05b57a8377..21be7877e9 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -1,15 +1,15 @@
+ name: test
+ 
+ on:
+-  pull_request:
++  # pull_request:
+   workflow_dispatch:
+-  workflow_call:
+-    inputs:
+-      branch:
+-        description: "ref branch for this workflow"
+-        default: "master"
+-        required: true
+-        type: string
++  # workflow_call:
++  #   inputs:
++  #     branch:
++  #       description: "ref branch for this workflow"
++  #       default: "master"
++  #       required: true
++  #       type: string
+ 
+ permissions: {}
+ 
+diff --git a/.github/workflows/update-actions.yml b/.github/workflows/update-actions.yml
+index f5a75f88f4..758325b7d2 100644
+--- a/.github/workflows/update-actions.yml
++++ b/.github/workflows/update-actions.yml
+@@ -1,8 +1,8 @@
+ name: update-actions
+ 
+ on:
+-  schedule:
+-    - cron: "0 4 * * 1"
++  # schedule:
++  #   - cron: "0 4 * * 1"
+   workflow_dispatch:
+ 
+ permissions: {}
+-- 
+2.53.0.windows.1
+

@@ -1,0 +1,13 @@
+name: variables_file
+long: variables-file
+value: FILE
+help: Define a properties file in which you define your variables
+help_heading: Run options
+multi: append
+cli_only: true
+---
+Set properties file in which your define your variables.
+
+Each variable is defined as name=value exactly as with [`--variable`](#variable) option.
+
+Note that defining a variable twice produces an error.

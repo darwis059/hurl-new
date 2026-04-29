@@ -1,0 +1,10 @@
+name: report_junit
+long: report-junit
+value: FILE
+help: Write a JUnit XML report to FILE
+help_heading: Report options
+cli_only: true
+---
+Generate JUnit File.
+
+If the FILE report already exists, it will be updated with the new test results.

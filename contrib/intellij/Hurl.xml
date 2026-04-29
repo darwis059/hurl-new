@@ -1,0 +1,22 @@
+<filetype binary="false" default_extension="hurl" description="Hurl" name="Hurl">
+    <highlighting>
+        <options>
+            <option name="LINE_COMMENT" value="#" />
+            <option name="COMMENT_START" value="" />
+            <option name="COMMENT_END" value="" />
+            <option name="HEX_PREFIX" value="" />
+            <option name="NUM_POSTFIXES" value="" />
+        </options>
+        <!-- Most used methods -->
+        <keywords keywords="GET;HEAD;POST;PUT;DELETE;CONNECT;DELETE;OPTIONS;TRACE;PATCH;LINK;UNLINK;PURGE;LOCK;UNLOCK;PROPFIND;VIEW" ignore_case="false" />
+        <!-- All sections -->
+        <keywords2 keywords="[Asserts];[BasicAuth];[Captures];[Cookies];[Form];[FormParams];[Multipart];[MultipartFormData];[Query];[QueryStringParams];[Options]" ignore_case="false" />
+        <!-- Queries -->
+        <keywords3 keywords="body;bytes;certificate;cookie;duration;header;ip;jsonpath;md5;redirects;regex;sha256;status;url;variable;version;xpath;HTTP;HTTP/1.0;HTTP/1.1;HTTP/2"  ignore_case="false"/>
+        <!-- Predicates and filters -->
+        <keywords4 keywords="not;&lt;;&lt;=;==;!=;&gt;;&gt;=;startsWith;endsWith;contains;includes;matches;exists;isBoolean;isCollection;isDate;isEmpty;isFloat;isInteger;isIsoDate;isNumber;isString;isIpv4;isIpv6;base64Decode;base64Encode;base64UrlSafeDecode;base64UrlSafeEncode;count;daysAfterNow;daysBeforeNow;decode;first;format;htmlEscape;htmlUnescape;jsonpath;last;location;nth;regex;replace;replaceRegex;split;toDate;toFloat;toHex;toInt;toString;urlDecode;urlEncode;urlQueryParam;xpath" ignore_case="false" />
+    </highlighting>
+    <extensionMap>
+        <mapping ext="hurl" />
+    </extensionMap>
+</filetype>

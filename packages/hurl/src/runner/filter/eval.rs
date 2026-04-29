@@ -1,0 +1,189 @@
+/*
+ * Hurl (https://hurl.dev)
+ * Copyright (C) 2026 Orange
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+use hurl_core::ast::{Filter, FilterValue};
+
+use crate::runner::filter::base64_decode::eval_base64_decode;
+use crate::runner::filter::base64_encode::eval_base64_encode;
+use crate::runner::filter::base64_url_safe_decode::eval_base64_url_safe_decode;
+use crate::runner::filter::base64_url_safe_encode::eval_base64_url_safe_encode;
+use crate::runner::filter::charset_decode::eval_charset_decode;
+use crate::runner::filter::count::eval_count;
+use crate::runner::filter::days_after_now::eval_days_after_now;
+use crate::runner::filter::days_before_now::eval_days_before_now;
+use crate::runner::filter::first::eval_first;
+use crate::runner::filter::format::eval_date_format;
+use crate::runner::filter::html_escape::eval_html_escape;
+use crate::runner::filter::html_unescape::eval_html_unescape;
+use crate::runner::filter::jsonpath::eval_jsonpath;
+use crate::runner::filter::last::eval_last;
+use crate::runner::filter::location::eval_location;
+use crate::runner::filter::nth::eval_nth;
+use crate::runner::filter::regex::eval_regex;
+use crate::runner::filter::replace::eval_replace;
+use crate::runner::filter::replace_regex::eval_replace_regex;
+use crate::runner::filter::split::eval_split;
+use crate::runner::filter::to_date::eval_to_date;
+use crate::runner::filter::to_float::eval_to_float;
+use crate::runner::filter::to_hex::eval_to_hex;
+use crate::runner::filter::to_int::eval_to_int;
+use crate::runner::filter::to_bool::eval_to_bool;
+use crate::runner::filter::to_string::eval_to_string;
+use crate::runner::filter::url_decode::eval_url_decode;
+use crate::runner::filter::url_encode::eval_url_encode;
+use crate::runner::filter::url_query_param::eval_url_query_param;
+use crate::runner::filter::utf8_decode::eval_utf8_decode;
+use crate::runner::filter::utf8_encode::eval_utf8_encode;
+use crate::runner::filter::xpath::eval_xpath;
+use crate::runner::{RunnerError, RunnerErrorKind, Value, VariableSet};
+
+/// Apply successive `filter` to an input `value`.
+/// Specify whether they are executed  `in_assert` or not.
+pub fn eval_filters(
+    filters: &[&Filter],
+    value: &Value,
+    variables: &VariableSet,
+    in_assert: bool,
+) -> Result<Option<Value>, RunnerError> {
+    let mut value = Some(value.clone());
+    for filter in filters {
+        value = if let Some(value) = value {
+            eval_filter(filter, &value, variables, in_assert)?
+        } else {
+            return Err(RunnerError::new(
+                filter.source_info,
+                RunnerErrorKind::FilterMissingInput,
+                in_assert,
+            ));
+        }
+    }
+    Ok(value)
+}
+
+/// Evaluates a `filter` with an input `value`, given a set of `variables`.
+pub fn eval_filter(
+    filter: &Filter,
+    value: &Value,
+    variables: &VariableSet,
+    in_assert: bool,
+) -> Result<Option<Value>, RunnerError> {
+    let source_info = filter.source_info;
+    match &filter.value {
+        FilterValue::Base64Decode => eval_base64_decode(value, source_info, in_assert),
+        FilterValue::Base64Encode => eval_base64_encode(value, source_info, in_assert),
+        FilterValue::Base64UrlSafeDecode => {
+            eval_base64_url_safe_decode(value, source_info, in_assert)
+        }
+        FilterValue::Base64UrlSafeEncode => {
+            eval_base64_url_safe_encode(value, source_info, in_assert)
+        }
+        FilterValue::Count => eval_count(value, source_info, in_assert),
+        FilterValue::CharsetDecode { encoding, .. } => {
+            eval_charset_decode(value, encoding, variables, source_info, in_assert)
+        }
+        FilterValue::DaysAfterNow => eval_days_after_now(value, source_info, in_assert),
+        FilterValue::DaysBeforeNow => eval_days_before_now(value, source_info, in_assert),
+        FilterValue::Decode { encoding, .. } => {
+            eval_charset_decode(value, encoding, variables, source_info, in_assert)
+        }
+        FilterValue::First => eval_first(value, source_info, in_assert),
+        FilterValue::Format { fmt, .. } => {
+            eval_date_format(value, fmt, variables, source_info, in_assert)
+        }
+        FilterValue::DateFormat { fmt, .. } => {
+            eval_date_format(value, fmt, variables, source_info, in_assert)
+        }
+        FilterValue::HtmlEscape => eval_html_escape(value, source_info, in_assert),
+        FilterValue::HtmlUnescape => eval_html_unescape(value, source_info, in_assert),
+        FilterValue::JsonPath { expr, .. } => {
+            eval_jsonpath(value, expr, variables, source_info, in_assert)
+        }
+        FilterValue::Last => eval_last(value, source_info, in_assert),
+        FilterValue::Location => eval_location(value, source_info, in_assert),
+        FilterValue::Regex {
+            value: regex_value, ..
+        } => eval_regex(value, regex_value, variables, source_info, in_assert),
+        FilterValue::Nth { n, .. } => eval_nth(value, n, variables, source_info, in_assert),
+        FilterValue::Replace {
+            old_value,
+            new_value,
+            ..
+        } => eval_replace(
+            value,
+            variables,
+            source_info,
+            in_assert,
+            old_value,
+            new_value,
+        ),
+        FilterValue::ReplaceRegex {
+            pattern, new_value, ..
+        } => eval_replace_regex(value, variables, source_info, in_assert, pattern, new_value),
+        FilterValue::Split { sep, .. } => eval_split(value, variables, source_info, in_assert, sep),
+        FilterValue::ToDate { fmt, .. } => {
+            eval_to_date(value, fmt, variables, source_info, in_assert)
+        }
+        FilterValue::ToFloat => eval_to_float(value, source_info, in_assert),
+        FilterValue::ToHex => eval_to_hex(value, source_info, in_assert),
+        FilterValue::ToInt => eval_to_int(value, source_info, in_assert),
+        FilterValue::ToBool => eval_to_bool(value, source_info, in_assert),
+        FilterValue::ToString => eval_to_string(value, source_info, in_assert),
+        FilterValue::UrlDecode => eval_url_decode(value, source_info, in_assert),
+        FilterValue::UrlEncode => eval_url_encode(value, source_info, in_assert),
+        FilterValue::UrlQueryParam { param, .. } => {
+            eval_url_query_param(value, param, variables, source_info, in_assert)
+        }
+        FilterValue::Utf8Decode => eval_utf8_decode(value, source_info, in_assert),
+        FilterValue::Utf8Encode => eval_utf8_encode(value, source_info, in_assert),
+        FilterValue::XPath { expr, .. } => {
+            eval_xpath(value, expr, variables, source_info, in_assert)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hurl_core::ast::{Filter, FilterValue, SourceInfo};
+    use hurl_core::reader::Pos;
+
+    use crate::runner::filter::eval::eval_filters;
+    use crate::runner::{Number, Value, VariableSet};
+
+    #[test]
+    fn test_filters() {
+        let variables = VariableSet::new();
+
+        assert_eq!(
+            eval_filters(
+                &[&Filter {
+                    source_info: SourceInfo::new(Pos::new(1, 1), Pos::new(1, 6)),
+                    value: FilterValue::Count,
+                }],
+                &Value::List(vec![
+                    Value::Number(Number::Integer(1)),
+                    Value::Number(Number::Integer(2)),
+                    Value::Number(Number::Integer(2)),
+                ]),
+                &variables,
+                false,
+            )
+            .unwrap()
+            .unwrap(),
+            Value::Number(Number::Integer(3))
+        );
+    }
+}

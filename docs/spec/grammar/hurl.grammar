@@ -1,0 +1,692 @@
+# General
+
+hurl-file: entry*
+           lt*
+
+entry: request
+       response?
+
+request:
+  lt*
+  method sp value-string lt
+  header*
+  request-section*
+  body?
+
+response:
+  lt*
+  version sp status lt
+  header*
+  response-section*
+  body?
+
+method: [A-Z]+
+
+version:
+    "HTTP/1.0"
+  | "HTTP/1.1"
+  | "HTTP/2"
+  | "HTTP"
+
+status: [0-9]+
+
+header:
+  lt*
+  key-value lt
+
+body:
+  lt*
+  bytes lt
+
+
+# Sections
+
+request-section:
+    basic-auth-section
+  | query-string-params-section
+  | form-params-section
+  | multipart-form-data-section
+  | cookies-section
+  | options-section
+
+response-section:
+    captures-section
+  | asserts-section
+
+query-string-params-section:
+  lt*
+  ("[QueryStringParams]" | "[Query]") lt
+  key-value*
+
+form-params-section:
+  lt*
+  ("[FormParams]" | "[Form]") lt
+  key-value*
+
+multipart-form-data-section:
+  lt*
+  ("[MultipartFormData]" | "[Multipart]") lt
+  multipart-form-data-param*
+
+cookies-section:
+  lt*
+  "[Cookies]" lt
+  key-value*
+
+captures-section:
+  lt*
+  "[Captures]" lt
+  capture*
+
+asserts-section:
+  lt*
+  "[Asserts]" lt
+  assert*
+
+basic-auth-section:
+  lt*
+  "[BasicAuth]" lt
+  key-value*
+
+
+options-section:
+  lt*
+  "[Options]" lt
+  option*
+
+key-value: key-string ":" value-string
+
+multipart-form-data-param: filename-param | key-value
+
+filename-param:
+  lt*
+  key-string ":" filename-value lt
+
+filename-value: "file," filename ";" (filename-content-type)?
+
+filename-content-type: value-string
+
+capture:
+  lt*
+  key-string ":" query (sp filter)* (sp "redact")? lt
+
+assert:
+  lt*
+  query (sp filter)* sp predicate lt
+
+option:
+  lt*
+  ( aws-sigv4-option
+  | ca-certificate-option
+  | client-certificate-option
+  | client-key-option
+  | compressed-option
+  | connect-to-option
+  | connect-timeout-option
+  | delay-option
+  | follow-redirect-option
+  | follow-redirect-trusted-option
+  | header-option
+  | http10-option
+  | http11-option
+  | http2-option
+  | http3-option
+  | insecure-option
+  | ipv4-option
+  | ipv6-option
+  | limit-rate-option
+  | max-redirs-option
+  | max-time-option
+  | netrc-option
+  | netrc-file-option
+  | netrc-optional-option
+  | output-option
+  | path-as-is-option
+  | pinned-public-key-option
+  | proxy-option
+  | repeat-option
+  | resolve-option
+  | retry-option
+  | retry-interval-option
+  | skip-option
+  | unix-socket-option
+  | user-option
+  | variable-option
+  | verbose-option
+  | very-verbose-option
+  )
+
+aws-sigv4-option: "aws-sigv4" ":" value-string lt
+
+ca-certificate-option: "cacert" ":" filename lt
+
+client-certificate-option: "cert" ":" filename-password lt
+
+client-key-option: "key" ":" value-string lt
+
+compressed-option: "compressed" ":" boolean-option lt
+
+connect-to-option: "connect-to" ":" value-string lt
+
+connect-timeout-option: "connect-timeout" ":" duration-option lt
+
+delay-option: "delay" ":" duration-option lt
+
+follow-redirect-option: "location" ":" boolean-option lt
+
+follow-redirect-trusted-option: "location-trusted" ":" boolean-option lt
+
+header-option: "header" ":" value-string lt
+
+http10-option: "http1.0" ":" boolean-option lt
+
+http11-option: "http1.1" ":" boolean-option lt
+
+http2-option: "http2" ":" boolean-option lt
+
+http3-option: "http3" ":" boolean-option lt
+
+insecure-option: "insecure" ":" boolean-option lt
+
+ipv4-option: "ipv4" ":" boolean-option lt
+
+ipv6-option: "ipv6" ":" boolean-option lt
+
+limit-rate-option: "limit-rate" ":" integer-option lt
+
+max-redirs-option: "max-redirs" ":" integer-option lt
+
+max-time-option: "max-time" ":" integer-option lt
+
+netrc-option: "netrc" ":" boolean-option lt
+
+netrc-file-option: "netrc-file" ":" value-string lt
+
+netrc-optional-option: "netrc-optional" ":" boolean-option lt
+
+output-option: "output" ":" value-string lt
+
+path-as-is-option: "path-as-is" ":" boolean-option lt
+
+pinned-public-key-option: "pinnedpubkey" ":" value-string lt
+
+proxy-option: "proxy" ":" value-string lt
+
+resolve-option: "resolve" ":" value-string lt
+
+repeat-option: "repeat" ":" integer-option lt
+
+retry-option: "retry" ":" integer-option lt
+
+retry-interval-option: "retry-interval" ":" duration-option lt
+
+skip-option: "skip" ":" boolean-option lt
+
+unix-socket-option: "unix-socket" ":" value-string lt
+
+user-option: "user" ":" value-string lt
+
+variable-option: "variable" ":" variable-definition lt
+
+verbose-option: "verbose" ":" boolean-option lt
+
+very-verbose-option: "very-verbose" ":" boolean-option lt
+
+variable-definition: variable-name "=" variable-value
+
+boolean-option: boolean | placeholder
+
+integer-option: integer | placeholder
+
+duration-option: (integer duration-unit?)  | placeholder
+
+duration-unit: "ms" | "s" | "m"
+
+variable-value:
+    null
+  | boolean
+  | integer
+  | float
+  | key-string
+  | quoted-string
+
+# Query
+
+query:
+    status-query
+  | version-query
+  | url-query
+  | ip-query
+  | header-query
+  | certificate-query
+  | cookie-query
+  | body-query
+  | xpath-query
+  | jsonpath-query
+  | regex-query
+  | variable-query
+  | duration-query
+  | bytes-query
+  | sha256-query
+  | md5-query
+
+status-query: "status"
+
+version-query: "version"
+
+url-query: "url"
+
+ip-query: "ip"
+
+header-query: "header" sp quoted-string
+
+certificate-query: "certificate" sp ("Subject" | "Issuer" | "Start-Date" | "Expire-Date" | "Serial-Number")
+
+cookie-query: "cookie" sp quoted-string
+
+body-query: "body"
+
+xpath-query: "xpath" sp quoted-string
+
+jsonpath-query: "jsonpath" sp quoted-string
+
+regex-query: "regex" sp (quoted-string | regex)
+
+variable-query: "variable" sp quoted-string
+
+duration-query: "duration"
+
+sha256-query: "sha256"
+
+md5-query: "md5"
+
+bytes-query: "bytes"
+
+
+# Predicates
+
+predicate: ("not" sp )? predicate-func
+
+predicate-func:
+    equal-predicate
+  | boolean-predicate
+  | contain-predicate
+  | end-with-predicate
+  | exist-predicate
+  | greater-or-equal-predicate
+  | greater-predicate
+  | include-predicate
+  | is-collection-predicate
+  | is-date-predicate
+  | is-float-predicate
+  | is-empty-predicate
+  | is-integer-predicate
+  | is-ipv4-predicate
+  | is-ipv6-predicate
+  | is-iso-date-predicate
+  | is-list
+  | is-object
+  | is-string-predicate
+  | is-uuid-predicate
+  | less-or-equal-predicate
+  | less-predicate
+  | match-predicate
+  | not-equal-predicate
+  | start-with-predicate
+
+equal-predicate: "==" sp predicate-value
+
+boolean-predicate: "isBoolean"
+
+contain-predicate: "contains" sp quoted-string
+
+end-with-predicate: "endsWith" sp (quoted-string | oneline-hex | oneline-base64)
+
+exist-predicate: "exists"
+
+greater-or-equal-predicate: ">=" sp sp* (number | quoted-string | placeholder)
+
+greater-predicate: ">" sp (number | quoted-string | placeholder)
+
+include-predicate: "includes" sp predicate-value
+
+is-collection-predicate: "isCollection"
+
+is-date-predicate: "isDate"
+
+is-empty-predicate: "isEmpty"
+
+is-float-predicate: "isFloat"
+
+is-integer-predicate: "isInteger"
+
+is-ipv4-predicate: "isIpv4"
+
+is-ipv6-predicate: "isIpv6"
+
+is-iso-date-predicate: "isIsoDate"
+
+is-list: "isList"
+
+is-object: "isObject"
+
+is-string-predicate: "isString"
+
+is-uuid-predicate: "isUuid"
+
+less-or-equal-predicate: "<=" sp (number | quoted-string | placeholder)
+
+less-predicate: "<" sp (number | quoted-string | placeholder)
+
+match-predicate: "matches" sp (quoted-string | regex)
+
+not-equal-predicate: "!=" sp predicate-value
+
+start-with-predicate: "startsWith" sp (quoted-string | oneline-hex | oneline-base64)
+
+
+predicate-value:
+    boolean
+  | multiline-string
+  | null
+  | number
+  | oneline-string
+  | oneline-base64
+  | oneline-file
+  | oneline-hex
+  | quoted-string
+  | placeholder
+
+
+# Bytes
+
+bytes:
+    json-value
+  | xml
+  | multiline-string
+  | oneline-string
+  | oneline-base64
+  | oneline-file
+  | oneline-hex
+
+xml: "<" "To Be Defined" ">"
+
+oneline-base64: "base64," [A-Z0-9+-= \n]+ ";"
+
+oneline-file: "file," filename ";"
+
+oneline-hex: "hex," hexdigit* ";"
+
+
+
+
+# Strings
+
+quoted-string: "\"" (quoted-string-content | placeholder)* "\""
+
+quoted-string-content: (quoted-string-text | quoted-string-escaped-char)*
+
+quoted-string-text: ~["\\]+
+
+quoted-string-escaped-char: "\\" ("\"" | "\\" | "\b" | "\f" | "\n" | "\r" | "\t" | "\u" unicode-char)
+
+
+key-string: (key-string-content | placeholder)+
+
+key-string-content: (key-string-text | key-string-escaped-char)*
+
+key-string-text: (alphanum | "_" | "-" | "." | "[" | "]" | "@" | "$") +
+
+key-string-escaped-char: "\\" ("#" | ":" | "\\" | "\b" | "\f" | "\n" | "\r" | "\t" | "\u" unicode-char )
+
+
+value-string: (value-string-content | placeholder)*
+
+value-string-content: (value-string-text | value-string-escaped-char)*
+
+value-string-text: ~[#\n\\]+
+
+value-string-escaped-char: "\\" ("#" | "\\" | "\b" | "\f" | "\n" | "\r" | "\t" | "\u" unicode-char )
+
+
+oneline-string: "`" (oneline-string-content | placeholder)* "`"
+
+oneline-string-content: (oneline-string-text | oneline-string-escaped-char)*
+
+oneline-string-text: ~[#\n\\] ~"`"
+
+oneline-string-escaped-char: "\\" ("`" | "#" | "\\" | "b" | "f" | "u" unicode-char )
+
+
+multiline-string:
+  "```" multiline-string-type? lt
+  (multiline-string-content | placeholder)* lt
+  "```"
+
+multiline-string-type:
+    "base64"
+  | "hex"
+  | "json"
+  | "xml"
+  | "graphql"
+  | "raw"
+
+multiline-string-content: (multiline-string-text | multiline-string-escaped-char)*
+
+multiline-string-text:  ~[\\]+ ~"```"
+
+multiline-string-escaped-char: "\\" ( "\\" | "b" | "f" | "n" | "r" | "t" | "`" | "u" unicode-char)
+
+filename: (filename-content | placeholder)*
+
+filename-content: (filename-text | filename-escaped-char)*
+
+filename-text: ~[#;{} \n\r\\]+
+
+filename-escaped-char: "\\" ( "\\" | "b" | "f" | "n" | "r" | "t" | "#" | ";"| " " | "{" | "}" | "u" unicode-char)
+
+
+filename-password: (filename-password-content | placeholder)*
+
+filename-password-content: (filename-password-text | filename-password-escaped-char)*
+
+filename-password-text: ~[#;{} \n\r\\]+
+
+filename-password-escaped-char: "\\" ( "\\" | "b" | "f" | "n" | "r" | "t" | "#" | ";" | " " | "{" | "}" | ":" | "u" unicode-char)
+
+unicode-char: "{" hexdigit+ "}"
+
+
+
+
+# JSON
+
+json-value:
+    placeholder
+  | json-object
+  | json-array
+  | json-string
+  | json-number
+  | boolean
+  | null
+
+json-object: "{" json-key-value ("," json-key-value)* "}"
+
+json-key-value: json-string ":" json-value
+
+json-array: "[" json-value ("," json-value)* "]"
+
+json-string: "\"" (json-string-content | placeholder)* "\""
+
+json-string-content: json-string-text | json-string-escaped-char
+
+json-string-text: ~["\\]
+
+json-string-escaped-char:
+    "\\" ("\"" | "\\" | "b" | "f" | "n" | "r" | "t" | "u" hexdigit hexdigit hexdigit hexdigit)
+
+json-number: [-]? json-integer fraction? exponent?
+
+json-integer: "0" | [1-9] digit*
+
+
+#  Expression
+
+placeholder: "{{" expr "}}"
+
+expr: (variable-name | function) (sp filter)*
+
+variable-name: [A-Za-z] [A-Za-z_-0-9]*
+
+
+# Function
+
+function:
+    env-function
+  | now-function
+  | uuid-function
+
+env-function: "getEnv"
+
+now-function: "newDate"
+
+uuid-function: "newUuid"
+
+
+
+# Filter
+
+filter:
+    base64-decode-filter
+  | base64-encode-filter
+  | base64-url-safe-decode-filter
+  | base64-url-safe-encode-filter
+  | charset-decode-filter
+  | charset-encode-filter
+  | count-filter
+  | days-after-now-filter
+  | days-before-now-filter
+  | first-filter
+  | date-format-filter
+  | html-escape-filter
+  | html-unescape-filter
+  | jsonpath-filter
+  | last-filter
+  | location-filter
+  | nth-filter
+  | regex-filter
+  | replace-filter
+  | replace-regex-filter
+  | split-filter
+  | to-date-filter
+  | to-float-filter
+  | to-hex-filter
+  | to-int-filter
+  | to-string-filter
+  | url-decode-filter
+  | url-encode-filter
+  | url-query-param-filter
+  | utf8-decode-filter
+  | utf8-encode-filter
+  | xpath-filter
+
+base64-decode-filter: "base64Decode"
+
+base64-encode-filter: "base64Encode"
+
+base64-url-safe-decode-filter: "base64UrlSafeDecode"
+
+base64-url-safe-encode-filter: "base64UrlSafeEncode"
+
+charset-decode-filter: "charsetDecode" sp quoted-string
+
+charset-encode-filter: "charsetEncode" sp quoted-string
+
+count-filter: "count"
+
+days-after-now-filter: "daysAfterNow"
+
+days-before-now-filter: "daysBeforeNow"
+
+first-filter: "first"
+
+date-format-filter: "dateFormat" sp quoted-string
+
+html-escape-filter: "htmlEscape"
+
+html-unescape-filter: "htmlUnescape"
+
+jsonpath-filter: "jsonpath" sp quoted-string
+
+last-filter: "last"
+
+location-filter: "location"
+
+nth-filter: "nth" sp (integer | placeholder)
+
+regex-filter: "regex" sp (quoted-string | regex)
+
+replace-filter: "replace" sp quoted-string sp quoted-string
+
+replace-regex-filter: "replaceRegex" sp (quoted-string | regex) sp quoted-string
+
+split-filter: "split" sp quoted-string
+
+to-date-filter: "toDate" sp quoted-string
+
+to-float-filter: "toFloat"
+
+to-hex-filter: "toHex"
+
+to-int-filter: "toInt"
+
+to-string-filter: "toString"
+
+url-decode-filter: "urlDecode"
+
+url-encode-filter: "urlEncode"
+
+url-query-param-filter: "urlQueryParam" sp quoted-string
+
+utf8-decode-filter: "utf8Decode"
+
+utf8-encode-filter: "utf8Encode"
+
+xpath-filter: "xpath" sp quoted-string
+
+
+# Lexical Grammar
+
+boolean: "true" | "false"
+
+null: "null"
+
+alphanum: [A-Za-z0-9]
+
+integer: digit+
+
+float: integer fraction
+
+number: integer | float
+
+digit: [0-9]
+
+hexdigit: [0-9A-Fa-f]
+
+fraction: "." digit+
+
+exponent: ("e" | "E") ("+"|"-")? digit+
+
+sp: [ \t]
+
+lt: sp* comment? [\n]?
+
+comment: "#" ~[\n]*
+
+regex: "/" regex-content "/"
+
+regex-content: (regex-text|regex-escaped-char)*
+
+regex-text: ~[\n\/]+
+
+regex-escaped-char: "\\" ~[\n]

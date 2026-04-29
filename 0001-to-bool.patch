@@ -1,0 +1,253 @@
+From 698623017d4fdacb5ff881e1be1a63d1fcebdd11 Mon Sep 17 00:00:00 2001
+From: Darwis <darwis.e03@gmail.com>
+Date: Wed, 29 Apr 2026 23:21:02 +0800
+Subject: [PATCH] to bool
+
+---
+ packages/hurl/src/runner/filter/eval.rs    |   2 +
+ packages/hurl/src/runner/filter/mod.rs     |   1 +
+ packages/hurl/src/runner/filter/to_bool.rs | 128 +++++++++++++++++++++
+ packages/hurl_core/src/ast/core.rs         |   2 +
+ packages/hurl_core/src/ast/visit.rs        |   1 +
+ packages/hurl_core/src/parser/filter.rs    |   6 +
+ packages/hurlfmt/src/linter/rewrite.rs     |   1 +
+ 7 files changed, 141 insertions(+)
+ create mode 100644 packages/hurl/src/runner/filter/to_bool.rs
+
+diff --git a/packages/hurl/src/runner/filter/eval.rs b/packages/hurl/src/runner/filter/eval.rs
+index 056a0cf14f..a9eb2d6e1c 100644
+--- a/packages/hurl/src/runner/filter/eval.rs
++++ b/packages/hurl/src/runner/filter/eval.rs
+@@ -41,6 +41,7 @@ use crate::runner::filter::to_date::eval_to_date;
+ use crate::runner::filter::to_float::eval_to_float;
+ use crate::runner::filter::to_hex::eval_to_hex;
+ use crate::runner::filter::to_int::eval_to_int;
++use crate::runner::filter::to_bool::eval_to_bool;
+ use crate::runner::filter::to_string::eval_to_string;
+ use crate::runner::filter::url_decode::eval_url_decode;
+ use crate::runner::filter::url_encode::eval_url_encode;
+@@ -139,6 +140,7 @@ pub fn eval_filter(
+         FilterValue::ToFloat => eval_to_float(value, source_info, in_assert),
+         FilterValue::ToHex => eval_to_hex(value, source_info, in_assert),
+         FilterValue::ToInt => eval_to_int(value, source_info, in_assert),
++        FilterValue::ToBool => eval_to_bool(value, source_info, in_assert),
+         FilterValue::ToString => eval_to_string(value, source_info, in_assert),
+         FilterValue::UrlDecode => eval_url_decode(value, source_info, in_assert),
+         FilterValue::UrlEncode => eval_url_encode(value, source_info, in_assert),
+diff --git a/packages/hurl/src/runner/filter/mod.rs b/packages/hurl/src/runner/filter/mod.rs
+index 3a70417acf..5ef82fef18 100644
+--- a/packages/hurl/src/runner/filter/mod.rs
++++ b/packages/hurl/src/runner/filter/mod.rs
+@@ -45,6 +45,7 @@ mod to_date;
+ mod to_float;
+ mod to_hex;
+ mod to_int;
++mod to_bool;
+ mod to_string;
+ mod url_decode;
+ mod url_encode;
+diff --git a/packages/hurl/src/runner/filter/to_bool.rs b/packages/hurl/src/runner/filter/to_bool.rs
+new file mode 100644
+index 0000000000..2b7cbc8c21
+--- /dev/null
++++ b/packages/hurl/src/runner/filter/to_bool.rs
+@@ -0,0 +1,128 @@
++/*
++ * Hurl (https://hurl.dev)
++ * Copyright (C) 2026 Orange
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *          http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ *
++ */
++use hurl_core::ast::SourceInfo;
++
++use crate::runner::{Number, RunnerError, RunnerErrorKind, Value};
++
++/// Converts `value` to a boolean.
++pub fn eval_to_bool(
++    value: &Value,
++    source_info: SourceInfo,
++    assert: bool,
++) -> Result<Option<Value>, RunnerError> {
++    match value {
++        Value::Number(Number::Integer(v)) => Ok(Some(Value::Bool(*v > 1))),
++        Value::Number(Number::Float(v)) => Ok(Some(Value::Bool(*v > 1.0))),
++         Value::String(v) => match v.parse::<i64>() {
++            Ok(i) => Ok(Some(Value::Bool(i > 1))),
++            _ => {
++                let kind = RunnerErrorKind::FilterInvalidInputValue(value.repr());
++                Err(RunnerError::new(source_info, kind, assert))
++            }
++        },
++        v => {
++            let kind = RunnerErrorKind::FilterInvalidInputType {
++                actual: v.kind().to_string(),
++                expected: "float, integer or string".to_string(),
++            };
++            Err(RunnerError::new(source_info, kind, assert))
++        }
++    }
++}
++
++// #[cfg(test)]
++// mod tests {
++//     use hurl_core::ast::{Filter, FilterValue, SourceInfo};
++//     use hurl_core::reader::Pos;
++
++//     use crate::runner::filter::eval::eval_filter;
++//     use crate::runner::{Number, RunnerErrorKind, Value, VariableSet};
++
++//     #[test]
++//     fn eval_filter_to_int() {
++//         let variables = VariableSet::new();
++//         let filter = Filter {
++//             source_info: SourceInfo::new(Pos::new(1, 1), Pos::new(1, 1)),
++//             value: FilterValue::ToInt,
++//         };
++//         assert_eq!(
++//             eval_filter(
++//                 &filter,
++//                 &Value::String("123".to_string()),
++//                 &variables,
++//                 false
++//             )
++//             .unwrap()
++//             .unwrap(),
++//             Value::Number(Number::Integer(123))
++//         );
++//         assert_eq!(
++//             eval_filter(
++//                 &filter,
++//                 &Value::Number(Number::Integer(123)),
++//                 &variables,
++//                 false
++//             )
++//             .unwrap()
++//             .unwrap(),
++//             Value::Number(Number::Integer(123))
++//         );
++//         assert_eq!(
++//             eval_filter(
++//                 &filter,
++//                 &Value::Number(Number::Float(1.6)),
++//                 &variables,
++//                 false
++//             )
++//             .unwrap()
++//             .unwrap(),
++//             Value::Number(Number::Integer(1))
++//         );
++//     }
++
++//     #[test]
++//     fn eval_filter_to_int_error() {
++//         let variables = VariableSet::new();
++//         let filter = Filter {
++//             source_info: SourceInfo::new(Pos::new(1, 1), Pos::new(1, 1)),
++//             value: FilterValue::ToInt,
++//         };
++//         let err = eval_filter(
++//             &filter,
++//             &Value::String("123x".to_string()),
++//             &variables,
++//             false,
++//         )
++//         .err()
++//         .unwrap();
++//         assert_eq!(
++//             err.kind,
++//             RunnerErrorKind::FilterInvalidInputValue("string <123x>".to_string())
++//         );
++//         let err = eval_filter(&filter, &Value::Bool(true), &variables, false)
++//             .err()
++//             .unwrap();
++//         assert_eq!(
++//             err.kind,
++//             RunnerErrorKind::FilterInvalidInputType {
++//                 actual: "boolean".to_string(),
++//                 expected: "float, integer or string".to_string()
++//             }
++//         );
++//     }
++// }
+diff --git a/packages/hurl_core/src/ast/core.rs b/packages/hurl_core/src/ast/core.rs
+index ec923fe5b0..17e63a68d7 100644
+--- a/packages/hurl_core/src/ast/core.rs
++++ b/packages/hurl_core/src/ast/core.rs
+@@ -337,6 +337,7 @@ pub enum FilterValue {
+     ToFloat,
+     ToHex,
+     ToInt,
++    ToBool,
+     ToString,
+     UrlDecode,
+     UrlEncode,
+@@ -382,6 +383,7 @@ impl FilterValue {
+             FilterValue::ToFloat => "toFloat",
+             FilterValue::ToHex => "toHex",
+             FilterValue::ToInt => "toInt",
++            FilterValue::ToBool => "toBool",
+             FilterValue::ToString => "toString",
+             FilterValue::UrlDecode => "urlDecode",
+             FilterValue::UrlEncode => "urlEncode",
+diff --git a/packages/hurl_core/src/ast/visit.rs b/packages/hurl_core/src/ast/visit.rs
+index f44ddccd27..8df538ce32 100644
+--- a/packages/hurl_core/src/ast/visit.rs
++++ b/packages/hurl_core/src/ast/visit.rs
+@@ -496,6 +496,7 @@ pub fn walk_filter<V: Visitor>(visitor: &mut V, filter: &Filter) {
+         FilterValue::ToFloat => {}
+         FilterValue::ToHex => {}
+         FilterValue::ToInt => {}
++        FilterValue::ToBool => {}
+         FilterValue::ToString => {}
+         FilterValue::UrlDecode => {}
+         FilterValue::UrlEncode => {}
+diff --git a/packages/hurl_core/src/parser/filter.rs b/packages/hurl_core/src/parser/filter.rs
+index cf3591de0b..192f7081cb 100644
+--- a/packages/hurl_core/src/parser/filter.rs
++++ b/packages/hurl_core/src/parser/filter.rs
+@@ -79,6 +79,7 @@ pub fn filter(reader: &mut Reader) -> ParseResult<Filter> {
+             to_float_filter,
+             to_hex_filter,
+             to_int_filter,
++            to_bool_filter,
+             to_string_filter,
+             url_decode_filter,
+             url_encode_filter,
+@@ -290,6 +291,11 @@ fn to_int_filter(reader: &mut Reader) -> ParseResult<FilterValue> {
+     Ok(FilterValue::ToInt)
+ }
+ 
++fn to_bool_filter(reader: &mut Reader) -> ParseResult<FilterValue> {
++    try_literal("toBool", reader)?;
++    Ok(FilterValue::ToBool)
++}
++
+ fn to_string_filter(reader: &mut Reader) -> ParseResult<FilterValue> {
+     try_literal("toString", reader)?;
+     Ok(FilterValue::ToString)
+diff --git a/packages/hurlfmt/src/linter/rewrite.rs b/packages/hurlfmt/src/linter/rewrite.rs
+index 9d63dbc7c8..fa5298d874 100644
+--- a/packages/hurlfmt/src/linter/rewrite.rs
++++ b/packages/hurlfmt/src/linter/rewrite.rs
+@@ -326,6 +326,7 @@ impl Lint for FilterValue {
+             | FilterValue::ToFloat
+             | FilterValue::ToHex
+             | FilterValue::ToInt
++            | FilterValue::ToBool
+             | FilterValue::ToString
+             | FilterValue::UrlDecode
+             | FilterValue::UrlEncode
+-- 
+2.53.0.windows.1
+

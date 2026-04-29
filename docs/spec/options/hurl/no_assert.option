@@ -1,0 +1,8 @@
+name: no_assert
+long: no-assert
+help: Ignore asserts defined in the Hurl file
+help_heading: Run options
+cli_only: true
+env_var: HURL_NO_ASSERT
+---
+Ignore all asserts defined in the Hurl file.
