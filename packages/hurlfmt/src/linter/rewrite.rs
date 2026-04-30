@@ -291,6 +291,10 @@ impl Lint for FilterValue {
                 s.push(' ');
                 s.push_str(&sep.lint());
             }
+            FilterValue::Equal { other, .. } => {
+                s.push(' ');
+                s.push_str(&other.lint());
+            }
             FilterValue::ReplaceRegex {
                 pattern, new_value, ..
             } => {

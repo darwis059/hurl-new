@@ -41,6 +41,7 @@ mod regex;
 mod replace;
 mod replace_regex;
 mod split;
+mod equal;
 mod to_date;
 mod to_float;
 mod to_hex;

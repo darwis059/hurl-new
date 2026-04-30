@@ -330,6 +330,10 @@ pub enum FilterValue {
         space0: Whitespace,
         sep: Template,
     },
+    Equal {
+        space0: Whitespace,
+        other: Template,
+    },
     ToDate {
         space0: Whitespace,
         fmt: Template,
@@ -379,6 +383,7 @@ impl FilterValue {
             FilterValue::Replace { .. } => "replace",
             FilterValue::ReplaceRegex { .. } => "replaceRegex",
             FilterValue::Split { .. } => "split",
+            FilterValue::Equal { .. } => "equal",
             FilterValue::ToDate { .. } => "toDate",
             FilterValue::ToFloat => "toFloat",
             FilterValue::ToHex => "toHex",

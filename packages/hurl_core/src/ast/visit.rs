@@ -489,6 +489,10 @@ pub fn walk_filter<V: Visitor>(visitor: &mut V, filter: &Filter) {
             visitor.visit_whitespace(space0);
             visitor.visit_template(sep);
         }
+        FilterValue::Equal { space0, other } => {
+            visitor.visit_whitespace(space0);
+            visitor.visit_template(other);
+        }
         FilterValue::ToDate { space0, fmt } => {
             visitor.visit_whitespace(space0);
             visitor.visit_template(fmt);

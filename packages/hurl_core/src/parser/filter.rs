@@ -269,6 +269,13 @@ fn split_filter(reader: &mut Reader) -> ParseResult<FilterValue> {
     Ok(FilterValue::Split { space0, sep })
 }
 
+fn equal_filter(reader: &mut Reader) -> ParseResult<FilterValue> {
+    try_literal("equal", reader)?;
+    let space0 = one_or_more_spaces(reader)?;
+    let other = quoted_template(reader).map_err(|e| e.to_non_recoverable())?;
+    Ok(FilterValue::Equal { space0, other })
+}
+
 fn to_date_filter(reader: &mut Reader) -> ParseResult<FilterValue> {
     try_literal("toDate", reader)?;
     let space0 = one_or_more_spaces(reader)?;

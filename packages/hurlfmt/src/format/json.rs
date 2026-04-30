@@ -701,6 +701,9 @@ impl ToJson for FilterValue {
             FilterValue::Split { sep, .. } => {
                 attributes.push(("sep".to_string(), JValue::String(sep.to_string())));
             }
+            FilterValue::Equal { other, .. } => {
+                attributes.push(("other".to_string(), JValue::String(other.to_string())));
+            }
             FilterValue::ToDate { fmt, .. } => {
                 attributes.push(("fmt".to_string(), JValue::String(fmt.to_string())));
             }
