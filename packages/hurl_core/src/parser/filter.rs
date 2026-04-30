@@ -75,6 +75,7 @@ pub fn filter(reader: &mut Reader) -> ParseResult<Filter> {
             replace_regex_filter,
             replace_filter,
             split_filter,
+            equal_filter,
             to_date_filter,
             to_float_filter,
             to_hex_filter,
