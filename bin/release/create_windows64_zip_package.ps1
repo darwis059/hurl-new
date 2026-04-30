@@ -6,9 +6,9 @@ write-host -foregroundcolor Cyan "----- create windows64 zip package -----"
 $actual_dir=(Get-Location).Path
 
 # set vars
-$hurl_package_version = Get-Content .\target\win-package\version.txt
+# $hurl_package_version = Get-Content .\target\win-package\version.txt
 $toolchain=((((rustup show active-toolchain) -Split " ")[0]) -Split "-",2)[1]
-$zip_path = "hurl-${hurl_package_version}-${toolchain}.zip"
+$zip_path = "hurl-${toolchain}.zip"
 $temp_path = "$PSScriptRoot\..\..\target\tmp"
 
 # create windows64 zip package
