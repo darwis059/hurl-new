@@ -104,8 +104,20 @@ jobs:
 
     - name: Create generic linux package
       run: |
+        # 1. Trick the scripts by copying the ARM binaries to the default x86 folder
+        mkdir -p target/release
+        cp target/armv7-unknown-linux-gnueabihf/release/hurl target/release/
+        cp target/armv7-unknown-linux-gnueabihf/release/hurlfmt target/release/
+
+        # 2. Run your documentation and packaging scripts
         bin/release/man.sh
         bin/release/create_tarball.sh
+
+        # 3. Rename the output tarballs in the upload folder from x86_64 to armv7
+        cd target/upload
+        for file in *-x86_64-unknown-linux-gnu.*; do
+            mv "$file" "${file/-x86_64-unknown-linux-gnu/-armv7-unknown-linux-gnueabihf}"
+        done
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
