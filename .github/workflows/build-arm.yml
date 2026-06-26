@@ -35,6 +35,7 @@ jobs:
     # NEW: Install the C cross-compiler toolchain required for ARMv7
     - name: Install ARMv7 cross-compiler
       run: |
+        # 1. Setup architectures and sources
         sudo dpkg --add-architecture armhf
         sudo sed -i -e 's/deb http/deb [arch=amd64,i386] http/g' /etc/apt/sources.list
         sudo sed -i -e 's/deb mirror/deb [arch=amd64,i386] mirror/g' /etc/apt/sources.list
@@ -47,7 +48,10 @@ jobs:
         
         sudo apt-get update
         
-        # ADDED libxml2 and libcurl ARM dependencies here:
+        # 2. NEW: Purge the pre-installed 64-bit headers that cause the dpkg conflict
+        sudo apt-get remove -y libcurl4-openssl-dev libssl-dev libxml2-dev
+        
+        # 3. Install the ARMv7 toolchain and ARMv7 specific headers
         sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross \
           libssl-dev:armhf pkg-config libxml2-dev:armhf libcurl4-openssl-dev:armhf
 
