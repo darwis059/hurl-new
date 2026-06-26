@@ -1,0 +1,84 @@
+name: package-drw-arm
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  package-generic-linux-armv7:
+    runs-on: ubuntu-22.04
+    env:
+      # Instructs cargo to build for ARMv7 by default (avoids needing to edit release.sh if it uses standard cargo build)
+      CARGO_BUILD_TARGET: armv7-unknown-linux-gnueabihf
+      # Tells the Rust compiler which C-linker to use for the ARMv7 cross-compilation
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+      with:
+        persist-credentials: false
+        ref: ${{ inputs.branch }}
+
+    - name: Install prerequisites
+      run: bin/install_prerequisites_ubuntu.sh
+
+    # NEW: Install the C cross-compiler toolchain required for ARMv7
+    - name: Install ARMv7 cross-compiler
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+
+    - name: Install Python 3.11
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 #v6.2.0
+      with:
+        python-version: '3.11'
+
+    - name: Activate python3 venv
+      run: |
+        bin/activate_python3_venv.sh
+        echo "/tmp/hurl-python3-venv/bin" >> "${GITHUB_PATH}"
+
+    - name: Python infos
+      run: |
+        which python3
+        python3 --version
+        pip --version
+
+    - name : Environment
+      run: bin/environment.sh
+
+    - name: Install rust
+      run: |
+        bin/install_rust.sh
+        # NEW: Ensure the specific ARMv7 target is added to your toolchain
+        rustup target add armv7-unknown-linux-gnueabihf
+
+    - name: Build
+      run: |
+        bin/release/release.sh
+        # MODIFIED: When cross-compiling, Rust outputs to a target-specific directory
+        echo "${PWD}/target/armv7-unknown-linux-gnueabihf/release" >> "${GITHUB_PATH}"
+
+    - name: Get version
+      run: |
+        VERSION=$(bin/release/get_version.sh)
+        echo "VERSION=${VERSION}" | tee -a "${GITHUB_ENV}"
+
+    - name: Create generic linux package
+      run: |
+        bin/release/man.sh
+        bin/release/create_tarball.sh
+
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+      with:
+        name: release-generic-linux-armv7-artifacts
+        path: target/upload/*
