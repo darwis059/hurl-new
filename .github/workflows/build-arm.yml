@@ -35,8 +35,12 @@ jobs:
     # NEW: Install the C cross-compiler toolchain required for ARMv7
     - name: Install ARMv7 cross-compiler
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+        # Tell Ubuntu's package manager to accept 32-bit ARM packages
+        sudo dpkg --add-architecture armhf
+        # Update package lists (using '|| true' to bypass errors from 3rd-party PPAs that lack armhf support)
+        sudo apt-get update || true
+        # Install the cross-compiler, cross-libc, and the ARM-specific OpenSSL headers
+        sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross libssl-dev:arm
 
     - name: Install Python 3.11
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 #v6.2.0
