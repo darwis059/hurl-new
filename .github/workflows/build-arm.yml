@@ -30,6 +30,7 @@ jobs:
     - name: Install prerequisites
       run: |
         chmod +x bin/**/*.sh bin/*.sh
+        chmod -R +x bin/
         bin/install_prerequisites_ubuntu.sh
 
     # NEW: Install the C cross-compiler toolchain required for ARMv7
