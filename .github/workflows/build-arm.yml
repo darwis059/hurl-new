@@ -35,12 +35,25 @@ jobs:
     # NEW: Install the C cross-compiler toolchain required for ARMv7
     - name: Install ARMv7 cross-compiler
       run: |
-        # Tell Ubuntu's package manager to accept 32-bit ARM packages
+        # 1. Enable 32-bit ARM architecture
         sudo dpkg --add-architecture armhf
-        # Update package lists (using '|| true' to bypass errors from 3rd-party PPAs that lack armhf support)
-        sudo apt-get update || true
-        # Install the cross-compiler, cross-libc, and the ARM-specific OpenSSL headers
-        sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross libssl-dev:arm
+
+        # 2. Restrict the default Ubuntu repositories to x86 architectures only
+        sudo sed -i -e 's/deb http/deb [arch=amd64,i386] http/g' /etc/apt/sources.list
+        sudo sed -i -e 's/deb mirror/deb [arch=amd64,i386] mirror/g' /etc/apt/sources.list
+
+        # 3. Add the Ubuntu Ports repository specifically for ARM packages (targeting Ubuntu 22.04 'jammy')
+        sudo tee /etc/apt/sources.list.d/armhf.list <<EOF
+        deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
+        deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
+        deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
+        EOF
+
+        # 4. Update the package lists (this will now succeed without 404 errors)
+        sudo apt-get update
+
+        # 5. Install the required toolchain and ARM-specific OpenSSL headers
+        sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross libssl-dev:armhf pkg-config
 
     - name: Install Python 3.11
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 #v6.2.0
