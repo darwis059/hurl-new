@@ -28,7 +28,9 @@ jobs:
         ref: ${{ inputs.branch }}
 
     - name: Install prerequisites
-      run: bin/install_prerequisites_ubuntu.sh
+      run: |
+        chmod +x bin/**/*.sh bin/*.sh
+        bin/install_prerequisites_ubuntu.sh
 
     # NEW: Install the C cross-compiler toolchain required for ARMv7
     - name: Install ARMv7 cross-compiler
